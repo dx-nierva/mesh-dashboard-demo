@@ -1,0 +1,177 @@
+/* ==========================================================================
+   style.css — ONE stylesheet. Every conditional appearance in this file is
+   a selector keyed off state that already exists in the DOM (an attribute,
+   a :checked, a :has()). There is no script anywhere that sets .style.* or
+   toggles a class to mean "show this" / "hide that".
+   ========================================================================== */
+
+:root{
+  --bg: #0e1512;
+  --panel: #141d18;
+  --panel-2: #182119;
+  --ink: #e7ede7;
+  --ink-soft: #9fb0a2;
+  --line: #263229;
+  --line-strong: #3a4a3d;
+  --accent: #ffb454;
+  --accent-2: #2dd4bf;
+  --ember: #f2857b;
+  --font: 'IBM Plex Sans', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+*{ box-sizing: border-box; }
+html,body{ height:100%; margin:0; }
+body{
+  background: var(--bg); color: var(--ink); font-family: var(--font);
+  font-size: 14px; display:flex; flex-direction:column; height:100vh; overflow:hidden;
+}
+button, input, select{ font: inherit; color: inherit; }
+h2{ font-size: .78rem; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); margin: 4px 0 10px; }
+fieldset{ border:1px solid var(--line); border-radius:8px; margin:0 0 12px; padding:8px; }
+legend{ font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); padding:0 4px; }
+
+button{
+  background: var(--panel-2); border:1px solid var(--line-strong); color:var(--ink);
+  border-radius:6px; padding:6px 10px; cursor:pointer;
+}
+button:hover{ border-color: var(--accent); }
+button:focus-visible, input:focus-visible, select:focus-visible{
+  outline:2px solid var(--accent-2); outline-offset:2px;
+}
+button.danger{ border-color: var(--ember); color: var(--ember); }
+button:disabled{ opacity:.4; cursor:not-allowed; }
+
+/* ---------------------------------------------------------------- toolbar */
+.toolbar{
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--line);
+}
+.toolbar-group{ display:flex; align-items:center; gap:6px; }
+.toolbar-label, .ro-label{ color:var(--ink-soft); font-size:.78rem; }
+.toolbar-check{ display:flex; align-items:center; gap:6px; font-size:.85rem; }
+.readouts{ display:flex; gap:16px; margin-left:auto; font-family:var(--mono); font-size:.78rem; color:var(--ink-soft); }
+select{ background:var(--panel-2); border:1px solid var(--line-strong); border-radius:6px; padding:5px 8px; }
+
+/* ---------------------------------------------------------------- layout */
+.workarea{ flex:1; display:grid; grid-template-columns: 240px 1fr 260px; min-height:0; }
+.palette{ background:var(--panel); border-right:1px solid var(--line); padding:12px; overflow-y:auto; display:flex; flex-direction:column; }
+.canvas-wrap{ position:relative; min-width:0; }
+.mesh-panel{ background:var(--panel); border-left:1px solid var(--line); padding:12px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; }
+
+/* ---------------------------------------------------------------- palette buttons: a flat radio group */
+.device-btn{
+  display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:6px;
+  cursor:pointer; font-size:.85rem; position:relative;
+}
+.device-btn:hover{ background: var(--panel-2); }
+.device-btn input{ position:absolute; opacity:0; width:1px; height:1px; }
+.device-btn:has(> input:checked){ background: var(--accent); color:#241503; font-weight:600; }
+.device-btn-none{ border-top:1px dashed var(--line); margin-top:4px; padding-top:10px; color:var(--ink-soft); }
+.device-btn .count{ margin-left:auto; font-family:var(--mono); font-size:.75rem; color:var(--ink-soft); display:inline-block; }
+.device-btn:has(> input:checked) .count{ color:#241503; }
+/* the number is printed straight from the data-count attribute -- script only
+   ever writes that attribute (see js/device-count.js); it never touches text */
+.device-btn .count::before{ content: attr(data-count); }
+
+/* ---------------------------------------------------------------- groups */
+.groups-panel{ margin-top:auto; border-top:1px solid var(--line); padding-top:10px; }
+.group-toolbar{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+.group-toolbar button, #erase-groups-btn{ font-size:.72rem; padding:5px 8px; }
+.groups-list{ list-style:none; margin:0 0 8px; padding:0; display:flex; flex-direction:column; gap:2px; max-height:140px; overflow-y:auto; }
+.group-row{ border-radius:6px; }
+.group-row label{ display:flex; align-items:center; gap:8px; padding:5px 6px; cursor:pointer; font-size:.85rem; }
+.group-row:has(.group-checkbox:checked){ background: var(--panel-2); outline:1px solid var(--accent-2); }
+#erase-groups-btn{ width:100%; }
+
+/* ---------------------------------------------------------------- canvas: mode-catcher */
+.canvas{
+  position:absolute; inset:0; display:grid; overflow:auto;
+  background-color:#0a100c;
+}
+.canvas > *{ grid-area: 1 / 1; }
+.mode-catcher{ min-width:100%; min-height:100%; cursor:crosshair; }
+#floorplan-canvas[data-linking="true"] .mode-catcher{ cursor:pointer; }
+
+/* the grid overlay is a pure CSS background toggle -- zero script.
+   toggle-grid lives in the toolbar, up and away from .canvas in the tree,
+   so the rule is anchored on body and reads back down to .canvas: */
+body:has(#toggle-grid:checked) .canvas{
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.pins-layer, .link-layer{ position:relative; pointer-events:none; }
+.link-layer{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+.link-line{ stroke: var(--accent-2); stroke-width:2; }
+
+.pin{
+  position:absolute; left:var(--x); top:var(--y); transform:translate(-50%,-50%);
+  pointer-events:auto; display:flex; align-items:center; gap:2px;
+  background:var(--panel-2); border:1px solid var(--line-strong); border-radius:20px;
+  padding:2px 6px 2px 2px; color:var(--ink);
+}
+.pin-body{
+  display:flex; align-items:center; gap:6px; background:none; border:none;
+  padding:2px 4px; border-radius:16px; cursor:pointer;
+}
+.pin-body:hover{ background: rgba(255,255,255,.06); }
+.pin-dot{ width:10px; height:10px; border-radius:50%; background:var(--ink-soft); flex:none; }
+.pin[data-type^="led"] .pin-dot{ background: var(--accent); }
+.pin[data-type^="dimmer"] .pin-dot{ background: var(--accent-2); }
+.pin-label{ font-size:.72rem; white-space:nowrap; }
+.pin-remove{
+  font-size:.65rem; color:var(--ink-soft); border-radius:50%; background:none; border:none;
+  width:16px; height:16px; padding:0; display:flex; align-items:center; justify-content:center; flex:none;
+}
+.pin-remove:hover{ background:var(--ember); color:#2a0a08; }
+.pin-group-select{
+  font-size:.65rem; max-width:70px; background:transparent; border:none; color:var(--ink-soft);
+  padding:0; border-left:1px solid var(--line-strong); margin-left:2px; padding-left:4px;
+}
+/* selected via a checked Group row, or currently the linking anchor */
+.pin[data-selected="true"]{ outline:2px solid var(--accent); }
+.pin[data-link-anchor="true"]{ outline:2px dashed var(--accent-2); }
+#floorplan-canvas[data-linking="true"] .pin{ cursor:crosshair; }
+
+/* ---------------------------------------------------------------- mesh panel */
+.mesh-header{ display:flex; gap:6px; }
+.status-line{ display:flex; align-items:center; gap:8px; margin:2px 0 6px; }
+.status-dot{ width:10px; height:10px; border-radius:50%; background:var(--ember); flex:none; }
+.status-word::before{ content:"Disconnected"; color:var(--ember); font-weight:600; }
+.mesh-panel[data-status="connecting"] .status-dot{ background:var(--accent); animation: pulse 1s infinite; }
+.mesh-panel[data-status="connecting"] .status-word::before{ content:"Connecting…"; color:var(--accent); }
+.mesh-panel[data-status="connected"] .status-dot{ background:var(--accent-2); }
+.mesh-panel[data-status="connected"] .status-word::before{ content:"Connected"; color:var(--accent-2); }
+@keyframes pulse{ 50%{ opacity:.3; } }
+
+.mesh-check{ display:flex; align-items:center; gap:6px; font-size:.85rem; }
+.dongle-row{ display:flex; gap:6px; }
+.dongle-row select{ flex:1; min-width:0; }
+
+/* Use Dongle unchecked -> the port row is pointless: dim + disable via CSS only */
+.mesh-panel:has(#use-dongle:not(:checked)) .dongle-row{ opacity:.4; }
+.mesh-panel:has(#use-dongle:not(:checked)) .dongle-row select,
+.mesh-panel:has(#use-dongle:not(:checked)) .dongle-row button{ pointer-events:none; }
+
+/* the Connect button itself reflects status without any script touching it */
+.mesh-panel[data-status="connected"] #connect-btn::before{ content:"Disconnect"; }
+.mesh-panel[data-status="connected"] #connect-btn{ color:var(--ember); }
+.mesh-panel:not([data-status="connected"]) #connect-btn::before{ content:"Connect"; }
+#connect-btn{ font-size:0; } /* the real label is fully supplied by ::before above */
+#connect-btn::before{ font-size: 14px; }
+.mesh-panel[data-status="connecting"] #connect-btn{ pointer-events:none; opacity:.6; }
+
+.device-count-line{ font-size:.85rem; margin:0; }
+.mesh-filter-label{ font-size:.78rem; color:var(--ink-soft); margin-top:4px; }
+#device-filter{ background:var(--panel-2); border:1px solid var(--line-strong); border-radius:6px; padding:6px 8px; }
+
+.mesh-device-list{ list-style:none; margin:0; padding:0; max-height:120px; overflow-y:auto; border:1px solid var(--line); border-radius:6px; }
+.device-row{ padding:6px 8px; font-size:.82rem; border-bottom:1px solid var(--line); }
+.device-row:last-child{ border-bottom:none; }
+.device-row[data-match="false"]{ display:none; }
+
+.undo-row{ display:flex; gap:6px; margin-top:auto; }
+.autosave-note{ font-size:.7rem; color:var(--ink-soft); margin:2px 0 0; }

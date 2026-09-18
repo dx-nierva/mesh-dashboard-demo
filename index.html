@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Map Devices to Floorplan — state-driven demo</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============================================================
+     TOOLBAR
+     Every readout here (Origin, Dimension, Grid Size) is a plain
+     text value written into the ONE place that shows it -- nobody
+     branches on it, nothing hides because of it. That's still
+     fine under the state-driven rule: the rule bans script
+     deciding WHAT'S VISIBLE, not script printing a computed number
+     into its one home.
+     ============================================================ -->
+<header class="toolbar">
+  <div class="toolbar-group">
+    <span class="toolbar-label">Project:</span>
+    <span class="project-name">Project 0</span>
+  </div>
+
+  <div class="toolbar-group">
+    <span class="toolbar-label">Area:</span>
+    <select id="area-select" title="Choose which floor area you're editing">
+      <option value="">Select area</option>
+    </select>
+    <template id="area-option-template">
+      <option></option>
+    </template>
+  </div>
+
+  <button type="button" id="new-area-btn" title="Create a new floorplan area">+ New Area</button>
+  <button type="button" id="open-last-area-btn" title="Reopen the most recently edited area">Open Last Area</button>
+  <button type="button" id="update-floorplan-btn" title="Re-measure the floorplan image dimensions">Update Floorplan</button>
+
+  <label class="toolbar-check" title="Show or hide the placement grid on the canvas">
+    <input type="checkbox" id="toggle-grid"> Toggle Grid
+  </label>
+
+  <div class="readouts">
+    <div><span class="ro-label">Origin:</span> <span id="origin-readout">(0, 0)</span></div>
+    <div><span class="ro-label">Dimension Input:</span> <span id="dimension-readout">0 x 0</span></div>
+    <div><span class="ro-label">Grid Size:</span> <span id="gridsize-readout">0px/cm x 0px/cm</span></div>
+  </div>
+</header>
+
+<div class="workarea">
+
+  <!-- ============================================================
+       LEFT PALETTE -- "which device type am I about to place"
+       is ONE flat name="place-mode" radio group. The little
+       "Current" number next to each is a data-count attribute
+       that CSS prints with content: attr(data-count) -- script
+       only ever updates the attribute, never the pixels.
+       ============================================================ -->
+  <aside class="palette" aria-label="Map devices to floorplan">
+
+    <fieldset class="palette-group">
+      <legend>LED</legend>
+      <label class="device-btn">
+        <input type="radio" name="place-mode" value="led-1" data-label="LED · 1 Channel">
+        <span>LED | 1 Channel</span>
+        <span class="count" data-count="0" aria-hidden="true"></span>
+      </label>
+      <label class="device-btn">
+        <input type="radio" name="place-mode" value="led-2" data-label="LED · 2 Channels">
+        <span>LED | 2 Channels</span>
+        <span class="count" data-count="0" aria-hidden="true"></span>
+      </label>
+      <label class="device-btn">
+        <input type="radio" name="place-mode" value="led-4" data-label="LED · 4 Channels">
+        <span>LED | 4 Channels</span>
+        <span class="count" data-count="0" aria-hidden="true"></span>
+      </label>
+    </fieldset>
+
+    <fieldset class="palette-group">
+      <legend>Dimmer</legend>
+      <label class="device-btn">
+        <input type="radio" name="place-mode" value="dimmer-1" data-label="Dimmer · 1 Channel">
+        <span>Dimmer | 1 Channel</span>
+        <span class="count" data-count="0" aria-hidden="true"></span>
+      </label>
+      <label class="device-btn">
+        <input type="radio" name="place-mode" value="dimmer-2" data-label="Dimmer · 2 Channels">
+        <span>Dimmer | 2 Channels</span>
+        <span class="count" data-count="0" aria-hidden="true"></span>
+      </label>
+    </fieldset>
+
+    <!-- one always-available radio for "not placing anything" -->
+    <label class="device-btn device-btn-none">
+      <input type="radio" name="place-mode" value="" checked>
+      <span>None (pan / select)</span>
+    </label>
+
+    <!-- ============================================================
+         GROUPS
+         ============================================================ -->
+    <section class="groups-panel" aria-label="Groups">
+      <h2>Groups</h2>
+      <div class="group-toolbar">
+        <button type="button" id="create-group-btn" title="Create a new empty group">+ Create Group</button>
+        <button type="button" id="merge-groups-btn" title="Merge the checked groups into one">Merge Group(s)</button>
+        <button type="button" id="delete-groups-btn" title="Delete the checked groups (keeps their devices)">Delete Group(s)</button>
+      </div>
+      <ul class="groups-list" id="groups-list">
+        <!-- <li class="group-row"> rows are cloned from #group-row-template -->
+      </ul>
+      <template id="group-row-template">
+        <li class="group-row" data-group-id="">
+          <label>
+            <input type="checkbox" class="group-checkbox">
+            <span class="group-name"></span>
+          </label>
+        </li>
+      </template>
+      <template id="group-option-template">
+        <option></option>
+      </template>
+      <button type="button" id="erase-groups-btn" class="danger" title="Delete the checked groups AND every device assigned to them">Erase Group(s)</button>
+    </section>
+  </aside>
+
+  <!-- ============================================================
+       FLOORPLAN CANVAS -- mode-catcher pattern (§8.2 of the guide).
+       The label fills the whole grid cell as the FIRST child;
+       real controls (pins, links) share the same cell after it.
+       ============================================================ -->
+  <main class="canvas-wrap">
+    <div class="canvas" id="floorplan-canvas" data-linking="false">
+      <label class="mode-catcher" for="canvas-catcher-radio" title="Click anywhere to place the armed device"></label>
+      <input type="radio" id="canvas-catcher-radio" name="canvas-focus" hidden>
+
+      <!-- Link lines are the one deliberate exception to "clone from a
+           <template>": an HTML <template>'s content can't reliably hold a
+           real, correctly-namespaced SVG element across browsers, so
+           mesh-link.js creates this one leaf node with createElementNS
+           instead. It's still not "building a subtree from a string" --
+           one namespaced element, with only known attributes set on it,
+           same as any cloned node would get. -->
+      <svg id="link-layer" class="link-layer"></svg>
+
+      <div class="pins-layer" id="pins-layer">
+        <!-- pins cloned from #pin-template -->
+      </div>
+      <template id="pin-template">
+        <div class="pin" data-device-id="" data-type="" data-group="">
+          <button type="button" class="pin-body" title="Click a second device to link them, while Linking Mode is on">
+            <span class="pin-dot"></span>
+            <span class="pin-label"></span>
+          </button>
+          <button type="button" class="pin-remove" title="Remove this device">✕</button>
+          <select class="pin-group-select" title="Assign this device to a group">
+            <option value="">No group</option>
+          </select>
+        </div>
+      </template>
+    </div>
+  </main>
+
+  <!-- ============================================================
+       MESH NETWORK PANEL
+       ============================================================ -->
+  <aside class="mesh-panel" data-status="disconnected" aria-label="Mesh Network">
+    <div class="mesh-header">
+      <button type="button" id="save-btn" title="Save this project to a file">💾 Save</button>
+      <button type="button" id="revert-btn" title="Revert to the last saved version">↺ Revert</button>
+    </div>
+
+    <h2>Mesh Network</h2>
+    <p class="status-line" role="status">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span class="status-word"></span>
+    </p>
+
+    <label class="mesh-check">
+      <input type="checkbox" id="use-dongle" checked> Use Dongle
+    </label>
+    <div class="dongle-row">
+      <select id="dongle-port" title="Choose the dongle's serial port">
+        <option value="">Select port…</option>
+        <option value="COM-SIM-1">Simulated Dongle (COM-SIM-1)</option>
+      </select>
+      <button type="button" id="connect-btn" title="Connect to the mesh dongle">Connect</button>
+    </div>
+
+    <p class="device-count-line" aria-live="polite">
+      <span id="device-count">0</span> Devices in Network
+    </p>
+    <button type="button" id="add-device-btn" title="Pair a new device into the mesh network" disabled>(◉) Add Device Into Network</button>
+
+    <label class="mesh-filter-label" for="device-filter">Filter:</label>
+    <input type="text" id="device-filter" placeholder="Filter devices…" title="Filter the device list by name">
+
+    <ul class="mesh-device-list" id="mesh-device-list">
+      <!-- rows cloned from #mesh-device-row-template -->
+    </ul>
+    <template id="mesh-device-row-template">
+      <li class="device-row" data-match="true">
+        <span class="device-row-name"></span>
+      </li>
+    </template>
+
+    <label class="mesh-check">
+      <input type="checkbox" id="linking-mode"> Linking Mode
+    </label>
+
+    <div class="undo-row">
+      <button type="button" id="undo-btn" title="Undo the last change">↶ Undo</button>
+      <button type="button" id="redo-btn" title="Redo the last undone change">↷ Redo</button>
+    </div>
+    <p class="autosave-note">Autosaving to this browser — click Save for a durable file.</p>
+  </aside>
+</div>
+
+<!-- Many small files. Each does one job. None calls into another's internals --
+     they only ever read/write the DOM state above, and talk to each other (when
+     they must) through the one "app:changed" event. -->
+<script src="js/state-io.js"></script>
+<script src="js/pin-lifecycle.js"></script>
+<script src="js/device-count.js"></script>
+<script src="js/group-actions.js"></script>
+<script src="js/group-options-sync.js"></script>
+<script src="js/pin-group-assign.js"></script>
+<script src="js/group-select.js"></script>
+<script src="js/mesh-link.js"></script>
+<script src="js/dongle-connect.js"></script>
+<script src="js/add-device-gate.js"></script>
+<script src="js/device-sync.js"></script>
+<script src="js/filter-devices.js"></script>
+<script src="js/toolbar-area.js"></script>
+<script src="js/undo-redo.js"></script>
+<script src="js/autosave.js"></script>
+<script src="js/save-revert.js"></script>
+</body>
+</html>
